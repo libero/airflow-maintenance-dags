@@ -1,8 +1,8 @@
 """
-A maintenance workflow that you can deploy into Airflow to periodically clean out entries in the DAG table of which there is no longer a corresponding Python File for it. This ensures that the DAG table doesn't have needless items in it and that the Airflow Web Server displays only those available DAGs.
-
-airflow trigger_dag airflow-clear-missing-dags
-
+A maintenance workflow that you can deploy into Airflow to periodically clean
+out entries in the DAG table of which there is no longer a corresponding Python
+File for it. This ensures that the DAG table doesn't have needless items in it
+and that the Airflow Web Server displays only those available DAGs.
 """
 from datetime import datetime, timedelta
 import os
@@ -16,15 +16,15 @@ from airflow import settings
 
 DAG_ID = os.path.basename(__file__).replace(".pyc", "").replace(".py", "")  # airflow-clear-missing-dags
 START_DATE = datetime.now() - timedelta(minutes=1)
-SCHEDULE_INTERVAL = "@daily"        # How often to Run. @daily - Once a day at Midnight
-DAG_OWNER_NAME = "operations"       # Who is listed as the owner of this DAG in the Airflow Web Server
-ALERT_EMAIL_ADDRESSES = []          # List of email address to send email alerts to if this job fails
-ENABLE_DELETE = True                # Whether the job should delete the logs or not. Included if you want to temporarily avoid deleting the logs
+SCHEDULE_INTERVAL = timedelta(days=1)  # How often to Run. @daily - Once a day at Midnight
+DAG_OWNER_NAME = "operations"          # Who is listed as the owner of this DAG in the Airflow Web Server
+ALERT_EMAIL_ADDRESSES = []             # List of email address to send email alerts to if this job fails
+ENABLE_DELETE = True                   # Whether the job should delete the logs or not. Included if you want to temporarily avoid deleting the logs
 
 default_args = {
     'owner': DAG_OWNER_NAME,
     'email': ALERT_EMAIL_ADDRESSES,
-    'email_on_failure': True,
+    'email_on_failure': False,
     'email_on_retry': False,
     'start_date': START_DATE,
     'retries': 1,
@@ -84,7 +84,7 @@ def clear_missing_dags_fn(**context):
             session.delete(entry)
         logging.info("Finished Performing Delete")
     else:
-        logging.warn("You're opted to skip deleting the DAG entries!!!")
+        logging.warning("You're opted to skip deleting the DAG entries!!!")
 
     logging.info("Finished Running Clear Process")
 

@@ -26,19 +26,19 @@ except ImportError:
 
 DAG_ID = os.path.basename(__file__).replace(".pyc", "").replace(".py", "")  # airflow-kill-halted-tasks
 START_DATE = now() - timedelta(minutes=1)
-SCHEDULE_INTERVAL = "@hourly"           # How often to Run. @daily - Once a day at Midnight. @hourly - Once an Hour.
-DAG_OWNER_NAME = "operations"           # Who is listed as the owner of this DAG in the Airflow Web Server
-ALERT_EMAIL_ADDRESSES = []              # List of email address to send email alerts to if this job fails
-SEND_PROCESS_KILLED_EMAIL = True        # Whether to send out an email whenever a process was killed during a DAG Run or not
+SCHEDULE_INTERVAL = timedelta(minutes=60)                       # How often to Run. @daily - Once a day at Midnight. @hourly - Once an Hour.
+DAG_OWNER_NAME = "operations"                                   # Who is listed as the owner of this DAG in the Airflow Web Server
+ALERT_EMAIL_ADDRESSES = []                                      # List of email address to send email alerts to if this job fails
+SEND_PROCESS_KILLED_EMAIL = False                               # Whether to send out an email whenever a process was killed during a DAG Run or not
 PROCESS_KILLED_EMAIL_SUBJECT = DAG_ID + " - Tasks were Killed"  # Subject of the email that is sent out when a task is killed by the DAG
-PROCESS_KILLED_EMAIL_ADDRESSES = []     # List of email address to send emails to when a task is killed by the DAG
-ENABLE_KILL = True                      # Whether the job should delete the db entries or not. Included if you want to temporarily avoid deleting the db entries.
-DEBUG = False                           # Whether to print out certain statements meant for debugging
+PROCESS_KILLED_EMAIL_ADDRESSES = []                             # List of email address to send emails to when a task is killed by the DAG
+ENABLE_KILL = True                                              # Whether the job should delete the db entries or not. Included if you want to temporarily avoid deleting the db entries.
+DEBUG = logging.getLogger().level == logging.DEBUG
 
 default_args = {
     'owner': DAG_OWNER_NAME,
     'email': ALERT_EMAIL_ADDRESSES,
-    'email_on_failure': True,
+    'email_on_failure': False,
     'email_on_retry': False,
     'start_date': START_DATE,
     'retries': 1,
@@ -69,23 +69,23 @@ airflow_run_regex = '.*run\s([\w_-]*)\s([\w_-]*)\s([\w:.-]*).*'
 
 def parse_process_linux_string(line):
     if DEBUG:
-        logging.info("DEBUG: Processing Line: " + str(line))
+        logging.debug("Processing Line: " + str(line))
     full_regex_match = re.search(full_regex, line)
     if DEBUG:
         for index in range(0, (len(full_regex_match.groups()) + 1)):
             group = full_regex_match.group(index)
-            logging.info("DEBUG: index: " + str(index) + ", group: " + str(group))
+            logging.debug("index: " + str(index) + ", group: " + str(group))
     pid = full_regex_match.group(2)
     command = full_regex_match.group(8).strip()
     process = {"pid": pid, "command": command}
 
     if DEBUG:
-        logging.info("DEBUG: Processing Command: " + str(command))
+        logging.debug("Processing Command: " + str(command))
     airflow_run_regex_match = re.search(airflow_run_regex, command)
     if DEBUG:
         for index in range(0, (len(airflow_run_regex_match.groups()) + 1)):
             group = airflow_run_regex_match.group(index)
-            logging.info("DEBUG: index: " + str(index) + ", group: " + str(group))
+            logging.debug("index: " + str(index) + ", group: " + str(group))
     process["airflow_dag_id"] = airflow_run_regex_match.group(1)
     process["airflow_task_id"] = airflow_run_regex_match.group(2)
     process["airflow_execution_date"] = airflow_run_regex_match.group(3)
@@ -119,7 +119,9 @@ def kill_halted_tasks_function(**context):
     logging.info(search_output)
 
     logging.info("Filtering out: Empty Lines, Grep processes, and this DAGs Run.")
-    search_output_filtered = [line for line in search_output.split("\n") if line is not None and line.strip() is not "" and 'grep' not in line and DAG_ID not in line]
+    search_output_filtered = [line for line in search_output.split("\n")
+                              if line is not None and line.strip() is not ""
+                              and 'grep' not in line and DAG_ID not in line]
     logging.info("Search Process Output (with Filter): ")
     for line in search_output_filtered:
         logging.info(line)
@@ -145,10 +147,10 @@ def kill_halted_tasks_function(**context):
 
         # Checking to make sure the DAG is available and active
         if DEBUG:
-            logging.info("DEBUG: Listing All DagModels: ")
+            logging.debug("Listing All DagModels: ")
             for dag in session.query(DagModel).all():
-                logging.info("DEBUG: dag: " + str(dag) + ", dag.is_active: " + str(dag.is_active))
-            logging.info("")
+                logging.debug("dag: " + str(dag) + ", dag.is_active: " + str(dag.is_active))
+            logging.debug("")
         logging.info("Getting dag where DagModel.dag_id == '" + str(process["airflow_dag_id"]) + "'")
         dag = session.query(DagModel).filter(
             DagModel.dag_id == process["airflow_dag_id"]
@@ -158,25 +160,25 @@ def kill_halted_tasks_function(**context):
             kill_reason = "DAG was not found in metastore."
             process["kill_reason"] = kill_reason
             processes_to_kill.append(process)
-            logging.warn(kill_reason)
-            logging.warn("Marking process to be killed.")
+            logging.warning(kill_reason)
+            logging.warning("Marking process to be killed.")
             continue
         logging.info("dag.is_active: " + str(dag.is_active))
         if not dag.is_active:  # is the dag active?
             kill_reason = "DAG was found to be Disabled."
             process["kill_reason"] = kill_reason
             processes_to_kill.append(process)
-            logging.warn(kill_reason)
-            logging.warn("Marking process to be killed.")
+            logging.warning(kill_reason)
+            logging.warning("Marking process to be killed.")
             continue
 
         # Checking to make sure the DagRun is available and in a running state
         if DEBUG:
             dag_run_relevant_states = ["queued", "running", "up_for_retry"]
-            logging.info("DEBUG: Listing All Relevant DAG Runs (With State: " + str(dag_run_relevant_states) + "): ")
+            logging.debug("Listing All Relevant DAG Runs (With State: " + str(dag_run_relevant_states) + "): ")
             for dag_run in session.query(DagRun).filter(DagRun.state.in_(dag_run_relevant_states)).all():
-                logging.info("DEBUG: dag_run: " + str(dag_run) + ", dag_run.state: " + str(dag_run.state))
-            logging.info("")
+                logging.debug("dag_run: " + str(dag_run) + ", dag_run.state: " + str(dag_run.state))
+            logging.debug("")
         logging.info("Getting dag_run where DagRun.dag_id == '" + str(process["airflow_dag_id"]) + "' AND DagRun.execution_date == '" + str(execution_date_to_search_for) + "'")
 
         dag_run = session.query(DagRun).filter(
@@ -191,8 +193,8 @@ def kill_halted_tasks_function(**context):
             kill_reason = "DAG RUN was not found in metastore."
             process["kill_reason"] = kill_reason
             processes_to_kill.append(process)
-            logging.warn(kill_reason)
-            logging.warn("Marking process to be killed.")
+            logging.warning(kill_reason)
+            logging.warning("Marking process to be killed.")
             continue
         logging.info("dag_run.state: " + str(dag_run.state))
         dag_run_states_required = ["running"]
@@ -200,17 +202,17 @@ def kill_halted_tasks_function(**context):
             kill_reason = "DAG RUN was found to not be in the states '" + str(dag_run_states_required) + "', but rather was in the state '" + str(dag_run.state) + "'."
             process["kill_reason"] = kill_reason
             processes_to_kill.append(process)
-            logging.warn(kill_reason)
-            logging.warn("Marking process to be killed.")
+            logging.warning(kill_reason)
+            logging.warning("Marking process to be killed.")
             continue
 
         # Checking to make sure the TaskInstance is available and in a running state
         if DEBUG:
             task_instance_relevant_states = ["queued", "running", "up_for_retry"]
-            logging.info("DEBUG: Listing All Relevant TaskInstances (With State: " + str(task_instance_relevant_states) + "): ")
+            logging.debug("Listing All Relevant TaskInstances (With State: " + str(task_instance_relevant_states) + "): ")
             for task_instance in session.query(TaskInstance).filter(TaskInstance.state.in_(task_instance_relevant_states)).all():
-                logging.info("DEBUG: task_instance: " + str(task_instance) + ", task_instance.state: " + str(task_instance.state))
-            logging.info("")
+                logging.debug("task_instance: " + str(task_instance) + ", task_instance.state: " + str(task_instance.state))
+            logging.debug("")
         logging.info("Getting task_instance where TaskInstance.dag_id == '" + str(process["airflow_dag_id"]) + "' AND TaskInstance.task_id == '" + str(process["airflow_task_id"]) + "' AND TaskInstance.execution_date == '" + str(execution_date_to_search_for) + "'")
 
         task_instance = session.query(TaskInstance).filter(
@@ -226,8 +228,8 @@ def kill_halted_tasks_function(**context):
             kill_reason = "Task Instance was not found in metastore. Marking process to be killed."
             process["kill_reason"] = kill_reason
             processes_to_kill.append(process)
-            logging.warn(kill_reason)
-            logging.warn("Marking process to be killed.")
+            logging.warning(kill_reason)
+            logging.warning("Marking process to be killed.")
             continue
         logging.info("task_instance.state: " + str(task_instance.state))
         task_instance_states_required = ["running", "up_for_retry"]
@@ -235,8 +237,8 @@ def kill_halted_tasks_function(**context):
             kill_reason = "The TaskInstance was found to not be in the states '" + str(task_instance_states_required) + "', but rather was in the state '" + str(task_instance.state) + "'."
             process["kill_reason"] = kill_reason
             processes_to_kill.append(process)
-            logging.warn(kill_reason)
-            logging.warn("Marking process to be killed.")
+            logging.warning(kill_reason)
+            logging.warning("Marking process to be killed.")
             continue
 
     # Listing processes that will be killed
@@ -264,7 +266,7 @@ def kill_halted_tasks_function(**context):
         else:
             logging.info("No Processes Marked to Kill Found")
     else:
-        logging.warn("You're opted to skip killing the processes!!!")
+        logging.warning("You're opted to skip killing the processes!!!")
 
     logging.info("")
     logging.info("Finished Running Cleanup Process")
