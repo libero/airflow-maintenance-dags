@@ -4,19 +4,20 @@ out entries in the DAG table of which there is no longer a corresponding Python
 File for it. This ensures that the DAG table doesn't have needless items in it
 and that the Airflow Web Server displays only those available DAGs.
 """
-from datetime import datetime, timedelta
 import os
-import os.path
 import socket
 import logging
+from datetime import timedelta
 
 from airflow.models import DAG, DagModel
 from airflow.operators.python_operator import PythonOperator
+from airflow.utils import timezone
 from airflow import settings
 
+
 DAG_ID = os.path.basename(__file__).replace(".pyc", "").replace(".py", "")  # airflow-clear-missing-dags
-START_DATE = datetime.now() - timedelta(minutes=1)
 SCHEDULE_INTERVAL = timedelta(days=1)  # How often to Run. @daily - Once a day at Midnight
+START_DATE = timezone.utcnow().replace(second=0, microsecond=0) - SCHEDULE_INTERVAL
 DAG_OWNER_NAME = "operations"          # Who is listed as the owner of this DAG in the Airflow Web Server
 ALERT_EMAIL_ADDRESSES = []             # List of email address to send email alerts to if this job fails
 ENABLE_DELETE = True                   # Whether the job should delete the logs or not. Included if you want to temporarily avoid deleting the logs
