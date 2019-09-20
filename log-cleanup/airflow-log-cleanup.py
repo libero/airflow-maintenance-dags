@@ -7,13 +7,14 @@ airflow trigger_dag --conf '{"maxLogAgeInDays":30}' airflow-log-cleanup
 --conf options:
     maxLogAgeInDays:<INT> - Optional
 """
+import os
+import logging
+from datetime import timedelta
+
 from airflow.models import DAG, Variable
 from airflow.configuration import conf
 from airflow.operators.bash_operator import BashOperator
 from airflow.utils import timezone
-from datetime import timedelta
-import os
-import logging
 
 
 DAG_ID = os.path.basename(__file__).replace(".pyc", "").replace(".py", "")  # airflow-log-cleanup
