@@ -9,27 +9,24 @@ airflow trigger_dag --conf '{"maxDBEntryAgeInDays":30}' airflow-db-cleanup
     maxDBEntryAgeInDays:<INT> - Optional
 
 """
-from airflow.models import DAG, DagRun, TaskInstance, Log, XCom, SlaMiss, DagModel, Variable
-from airflow.jobs import BaseJob
-from airflow import settings
-from airflow.operators.python_operator import PythonOperator
-from datetime import datetime, timedelta
 import os
 import logging
+from datetime import timedelta
+
+from airflow.models import DAG, DagRun, TaskInstance, Log, XCom, SlaMiss, DagModel, Variable
+from airflow.jobs import BaseJob
+from airflow.operators.python_operator import PythonOperator
+from airflow.utils import timezone
+from airflow import settings
 
 import dateutil.parser
 from sqlalchemy import func, and_
 from sqlalchemy.orm import load_only
 
-try:
-    from airflow.utils import timezone  # airflow.utils.timezone is available from v1.10 onwards
-    now = timezone.utcnow
-except ImportError:
-    now = datetime.utcnow
 
 DAG_ID = os.path.basename(__file__).replace(".pyc", "").replace(".py", "")  # airflow-db-cleanup
-START_DATE = now() - timedelta(minutes=1)
 SCHEDULE_INTERVAL = timedelta(days=1)   # How often to Run. @daily - Once a day at Midnight (UTC)
+START_DATE = timezone.utcnow().replace(second=0, microsecond=0) - SCHEDULE_INTERVAL
 DAG_OWNER_NAME = "operations"           # Who is listed as the owner of this DAG in the Airflow Web Server
 ALERT_EMAIL_ADDRESSES = []              # List of email address to send email alerts to if this job fails
 DEFAULT_MAX_DB_ENTRY_AGE_IN_DAYS = int(Variable.get("max_db_entry_age_in_days", 30)) # Length to retain the log files if not already provided in the conf. If this is set to 30, the job will remove those files that are 30 days old or older.

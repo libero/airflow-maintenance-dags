@@ -10,20 +10,16 @@ airflow trigger_dag --conf '{"maxLogAgeInDays":30}' airflow-log-cleanup
 from airflow.models import DAG, Variable
 from airflow.configuration import conf
 from airflow.operators.bash_operator import BashOperator
-from datetime import datetime, timedelta
+from airflow.utils import timezone
+from datetime import timedelta
 import os
 import logging
 
-try:
-    from airflow.utils import timezone  # airflow.utils.timezone is available from v1.10 onwards
-    now = timezone.utcnow
-except ImportError:
-    now = datetime.utcnow
 
 DAG_ID = os.path.basename(__file__).replace(".pyc", "").replace(".py", "")  # airflow-log-cleanup
-START_DATE = now() - timedelta(minutes=1)
-BASE_LOG_FOLDER = conf.get("core", "BASE_LOG_FOLDER")
 SCHEDULE_INTERVAL = timedelta(days=1)  # How often to Run. @daily - Once a day at Midnight
+START_DATE = timezone.utcnow().replace(second=0, microsecond=0) - SCHEDULE_INTERVAL
+BASE_LOG_FOLDER = conf.get("core", "BASE_LOG_FOLDER")
 DAG_OWNER_NAME = "operations"          # Who is listed as the owner of this DAG in the Airflow Web Server
 ALERT_EMAIL_ADDRESSES = []             # List of email address to send email alerts to if this job fails
 DEFAULT_MAX_LOG_AGE_IN_DAYS = Variable.get("max_log_age_in_days", 30)  # Length to retain the log files if not already provided in the conf. If this is set to 30, the job will remove those files that are 30 days old or older

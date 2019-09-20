@@ -1,32 +1,32 @@
 """
-A maintenance workflow that you can deploy into Airflow to periodically kill off tasks that are running in the background that don't correspond to a running task in the DB.
+A maintenance workflow that you can deploy into Airflow to periodically kill
+off tasks that are running in the background that don't correspond to a running
+task in the DB.
 
-This is useful because when you kill off a DAG Run or Task through the Airflow Web Server, the task still runs in the background on one of the executors until the task is complete.
+This is useful because when you kill off a DAG Run or Task through the Airflow
+Web Server, the task still runs in the background on one of the executors until
+the task is complete.
 
 airflow trigger_dag airflow-kill-halted-tasks
-
 """
-from airflow.models import DAG, DagModel, DagRun, TaskInstance
-from airflow import settings
-from airflow.operators.python_operator import PythonOperator, ShortCircuitOperator
-from airflow.operators.email_operator import EmailOperator
-from sqlalchemy import and_
-from datetime import datetime, timedelta
 import os
 import re
 import logging
+from datetime import datetime, timedelta
+
 import pytz
 import airflow
+from airflow.models import DAG, DagModel, DagRun, TaskInstance
+from airflow.operators.python_operator import PythonOperator, ShortCircuitOperator
+from airflow.operators.email_operator import EmailOperator
+from airflow.utils import timezone
+from airflow import settings
+from sqlalchemy import and_
 
-try:
-    from airflow.utils import timezone  # airflow.utils.timezone is available from v1.10 onwards
-    now = timezone.utcnow
-except ImportError:
-    now = datetime.utcnow
 
 DAG_ID = os.path.basename(__file__).replace(".pyc", "").replace(".py", "")  # airflow-kill-halted-tasks
-START_DATE = now() - timedelta(minutes=1)
 SCHEDULE_INTERVAL = timedelta(minutes=60)                       # How often to Run. @daily - Once a day at Midnight. @hourly - Once an Hour.
+START_DATE = timezone.utcnow().replace(second=0, microsecond=0) - SCHEDULE_INTERVAL
 DAG_OWNER_NAME = "operations"                                   # Who is listed as the owner of this DAG in the Airflow Web Server
 ALERT_EMAIL_ADDRESSES = []                                      # List of email address to send email alerts to if this job fails
 SEND_PROCESS_KILLED_EMAIL = False                               # Whether to send out an email whenever a process was killed during a DAG Run or not
